@@ -696,12 +696,12 @@ centos_build_kernel()
         return "$rc"
     fi
 
-    kb_status_begin "   - Verifying localversion config"
-    if centos_ensure_localversion_matches_for_build >>"$LOG_FILE" 2>&1; then
-        kb_status_end_ok "   - Verifying localversion config"
+    kb_status_begin "   - Ensuring localversion config"
+    if kb_apply_localversion_config "$KERNEL_SRC_DIR" "${KERNEL_BUILD_DIR}/.config" "$LOCALVERSION" >>"$LOG_FILE" 2>&1; then
+        kb_status_end_ok "   - Ensuring localversion config"
     else
         rc=$?
-        kb_status_end_fail "   - Verifying localversion config" "$rc"
+        kb_status_end_fail "   - Ensuring localversion config" "$rc"
         return "$rc"
     fi
 
