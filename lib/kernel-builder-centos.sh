@@ -164,6 +164,10 @@ centos_require_local_commands()
         cmds+=(gcc ld bc perl python3 flex bison patch xz)
     fi
 
+    if [[ "$DO_BUILD_RPM" == true ]]; then
+        cmds+=(rpmbuild)
+    fi
+
     if [[ "$DO_CLONE" == true || "$PREP_FOR_BACKPORTING" == true ]]; then
         cmds+=(git)
     fi
@@ -421,7 +425,7 @@ centos_configure_kernel()
     echo "${WHITE}   - Log file: ${CYAN}${LOG_FILE}${NORMAL}"
 
     kb_status_begin "   - Resetting build directory"
-    if rm -rf "$KERNEL_BUILD_DIR" "$HOME/rpmbuild" && mkdir -p "$KERNEL_BUILD_DIR"; then
+    if rm -rf "$KERNEL_BUILD_DIR" && mkdir -p "$KERNEL_BUILD_DIR"; then
         kb_status_end_ok "   - Resetting build directory"
     else
         rc=$?
@@ -486,7 +490,6 @@ centos_clean_kernel()
 
     kb_status_begin "   - Resetting build directory"
 
-    rm -rf "$HOME/rpmbuild"
     rm -rf "$KERNEL_BUILD_DIR"
     mkdir -p "$KERNEL_BUILD_DIR"
 
@@ -605,6 +608,8 @@ centos_collect_rpms()
 {
     local rc
     local rpm_dir="${KERNEL_BUILD_DIR}/deploy/rpms"
+    local rpm_src_dir="${KERNEL_BUILD_DIR}/rpmbuild/RPMS/${TARGET_ARCH}"
+    local -a rpm_files=()
 
     [[ "$DO_BUILD_RPM" == true ]] || return 0
 
@@ -618,13 +623,28 @@ centos_collect_rpms()
     fi
 
     kb_status_begin "   - Collecting RPM packages"
-    if mkdir -p "$rpm_dir" && compgen -G "$HOME/rpmbuild/RPMS/${TARGET_ARCH}/*.rpm" >/dev/null; then
-        cp "$HOME"/rpmbuild/RPMS/"${TARGET_ARCH}"/*.rpm "$rpm_dir"/
+    if ! mkdir -p "$rpm_dir"; then
+        rc=$?
+        kb_status_end_fail "   - Collecting RPM packages" "$rc"
+        return "$rc"
+    fi
+
+    mapfile -t rpm_files < <(find "$rpm_src_dir" -maxdepth 1 -type f -name '*.rpm' -print 2>/dev/null)
+    if ((${#rpm_files[@]} == 0)); then
+        {
+            echo "No RPM files found under: ${rpm_src_dir}"
+            echo "Expected binrpm-pkg output under: ${KERNEL_BUILD_DIR}/rpmbuild/RPMS/${TARGET_ARCH}"
+        } >>"$LOG_FILE"
+        kb_status_end_fail "   - Collecting RPM packages" 1
+        return 1
+    fi
+
+    if cp -v "${rpm_files[@]}" "$rpm_dir"/ >>"$LOG_FILE" 2>&1; then
         kb_status_end_ok "   - Collecting RPM packages"
     else
         rc=$?
         kb_status_end_fail "   - Collecting RPM packages" "$rc"
-        return 1
+        return "$rc"
     fi
 }
 
