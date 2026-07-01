@@ -105,7 +105,7 @@ upstream_require_local_commands()
         kb_require_commands dtc
     fi
 
-    if [[ "$DEBUG_CONFIG" == true ]]; then
+    if [[ "$DO_CONFIG" == true ]]; then
         kb_require_commands ctags
     fi
 }
@@ -196,15 +196,6 @@ upstream_configure_kernel()
             kb_status_end_fail "   - Applying debug config" "$rc"
             return "$rc"
         fi
-
-        kb_status_begin "   - Building ctags"
-        if kb_build_ctags "$KERNEL_SRC_DIR" "$KERNEL_BUILD_DIR" >>"$LOG_FILE" 2>&1; then
-            kb_status_end_ok "   - Building ctags"
-        else
-            rc=$?
-            kb_status_end_fail "   - Building ctags" "$rc"
-            return "$rc"
-        fi
     fi
 
     kb_status_begin "   - Normalizing config again"
@@ -213,6 +204,15 @@ upstream_configure_kernel()
     else
         rc=$?
         kb_status_end_fail "   - Normalizing config again" "$rc"
+        return "$rc"
+    fi
+
+    kb_status_begin "   - Building ctags"
+    if kb_build_ctags "$KERNEL_SRC_DIR" "$KERNEL_BUILD_DIR" >>"$LOG_FILE" 2>&1; then
+        kb_status_end_ok "   - Building ctags"
+    else
+        rc=$?
+        kb_status_end_fail "   - Building ctags" "$rc"
         return "$rc"
     fi
 
