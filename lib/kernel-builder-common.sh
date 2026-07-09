@@ -416,6 +416,12 @@ kb_build_ctags()
     if kb_ctags_has "--languages="; then
         ctags_args+=( --languages="${languages}" )
     fi
+
+    # Explicitly parse .h files as C.
+    if kb_ctags_has "--langmap"; then
+        ctags_args+=( --langmap=C:+.h )
+    fi
+
     if kb_ctags_has "--fields="; then
         ctags_args+=( --fields=+iaS )
     fi
