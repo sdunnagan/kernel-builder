@@ -42,7 +42,7 @@ Options:
   -h                            Show help
   -k <config-file>              Apply Kconfig from file
   -l <localversion>             Set CONFIG_LOCALVERSION
-  -p <platform>                 Target platform (required: opi5plus|rpi4|orin-nano)
+  -p <platform>                 Target platform (required: opi5plus|rpi4|orin-nano|arm-server)
   -r                            Build RPM packages
   -s <stream>                   CentOS/RHEL kernel stream (y9|y10|z9|z10)
   -U <upstream-kernel-repo>     Upstream kernel repository (next|stable)
@@ -581,10 +581,17 @@ centos_build_dtbs()
     local rc
     local deploy_dtbs_dir="${KERNEL_BUILD_DIR}/deploy/dtbs"
 
-    [[ "$TARGET_ARCH" == "x86_64" ]] && return 0
+    if [[ -z "${DTB_REL_PATH:-}" ]]; then
+        # Avoid exposing stale DTBs when a build directory is reused for an
+        # ACPI/UEFI platform that does not use a board DTB.
+        rm -rf "$deploy_dtbs_dir"
+        return 0
+    fi
 
     kb_status_begin "   - Building DTBs"
-    if make -C "$KERNEL_SRC_DIR" -j"$(nproc)" O="$KERNEL_BUILD_DIR" ARCH="$KERNEL_ARCH" DTC_FLAGS="-@" dtbs >>"$LOG_FILE" 2>&1; then
+    if make -C "$KERNEL_SRC_DIR" -j"$(nproc)" \
+        O="$KERNEL_BUILD_DIR" ARCH="$KERNEL_ARCH" DTC_FLAGS="-@" \
+        dtbs >>"$LOG_FILE" 2>&1; then
         kb_status_end_ok "   - Building DTBs"
     else
         rc=$?
@@ -593,9 +600,11 @@ centos_build_dtbs()
     fi
 
     kb_status_begin "   - Installing DTBs into deploy/dtbs"
-    if mkdir -p "$deploy_dtbs_dir" && \
-       make -C "$KERNEL_SRC_DIR" O="$KERNEL_BUILD_DIR" ARCH="$KERNEL_ARCH" DTC_FLAGS="-@" \
-            INSTALL_DTBS_PATH="$deploy_dtbs_dir" dtbs_install >>"$LOG_FILE" 2>&1; then
+    if mkdir -p "$deploy_dtbs_dir" &&
+        make -C "$KERNEL_SRC_DIR" \
+            O="$KERNEL_BUILD_DIR" ARCH="$KERNEL_ARCH" DTC_FLAGS="-@" \
+            INSTALL_DTBS_PATH="$deploy_dtbs_dir" \
+            dtbs_install >>"$LOG_FILE" 2>&1; then
         kb_status_end_ok "   - Installing DTBs into deploy/dtbs"
     else
         rc=$?

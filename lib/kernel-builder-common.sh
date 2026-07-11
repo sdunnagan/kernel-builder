@@ -129,16 +129,16 @@ kb_normalize_platform()
 {
     case "${1:-}" in
         opi5+|opi5plus)
-            printf 'opi5plus
-'
+            printf 'opi5plus\n'
             ;;
         rpi4|rpi4b|raspberrypi4)
-            printf 'rpi4
-'
+            printf 'rpi4\n'
             ;;
         orin-nano|orinnano)
-            printf 'orin-nano
-'
+            printf 'orin-nano\n'
+            ;;
+        arm-server|armserver)
+            printf 'arm-server\n'
             ;;
         *)
             return 1
@@ -148,15 +148,16 @@ kb_normalize_platform()
 
 kb_require_platform()
 {
-    [[ -n "${1:-}" ]] || kb_die "-p <platform> is required. Supported platforms: opi5plus, rpi4, orin-nano" 2
+    [[ -n "${1:-}" ]] ||
+        kb_die "-p <platform> is required.
+Supported platforms: opi5plus, rpi4, orin-nano, arm-server" 2
 }
 
 kb_platform_to_target_arch()
 {
     case "$1" in
-        opi5plus|rpi4|orin-nano)
-            printf 'aarch64
-'
+        opi5plus|rpi4|orin-nano|arm-server)
+            printf 'aarch64\n'
             ;;
         *)
             return 1
@@ -168,16 +169,17 @@ kb_platform_to_dtb_rel_path()
 {
     case "$1" in
         opi5plus)
-            printf 'rockchip/rk3588-orangepi-5-plus.dtb
-'
+            printf 'rockchip/rk3588-orangepi-5-plus.dtb\n'
             ;;
         rpi4)
-            printf 'broadcom/bcm2711-rpi-4-b.dtb
-'
+            printf 'broadcom/bcm2711-rpi-4-b.dtb\n'
             ;;
         orin-nano)
-            printf 'nvidia/tegra234-p3768-0000+p3767-0005.dtb
-'
+            printf 'nvidia/tegra234-p3768-0000+p3767-0005.dtb\n'
+            ;;
+        arm-server)
+            # UEFI/ACPI arm64 servers do not use a builder-supplied board DTB.
+            printf '\n'
             ;;
         *)
             return 1
@@ -193,7 +195,7 @@ kb_resolve_platform()
     kb_require_platform "$requested_platform"
 
     if ! normalized_platform="$(kb_normalize_platform "$requested_platform")"; then
-        kb_die "Unknown platform preset: ${requested_platform}. Supported platforms: opi5plus, rpi4, orin-nano" 2
+        kb_die "Unknown platform preset: ${requested_platform}. Supported platforms: opi5plus, rpi4, orin-nano, arm-server" 2
     fi
 
     PLATFORM="$normalized_platform"

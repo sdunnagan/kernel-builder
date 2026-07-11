@@ -32,7 +32,7 @@ Options:
   -h                            Show help
   -k <config-file>              Apply Kconfig from file
   -l <localversion>             Set CONFIG_LOCALVERSION
-  -p <platform>                 Target platform (required: opi5plus|rpi4|orin-nano)
+  -p <platform>                 Target platform (required: opi5plus|rpi4|orin-nano|arm-server)
 
 Environment:
   KERNEL_SRC_DIR=${KERNEL_SRC_DIR:-<unset>}
@@ -336,7 +336,10 @@ upstream_install_dtbs_to_deploy()
     local rc
     local deploy_dtbs_dir="${KERNEL_BUILD_DIR}/deploy/dtbs"
 
-    [[ "$TARGET_ARCH" == "x86_64" ]] && return 0
+    if [[ -z "${DTB_REL_PATH:-}" ]]; then
+        rm -rf "${KERNEL_BUILD_DIR}/deploy/dtbs"
+        return 0
+    fi
 
     kb_status_begin "   - Installing DTBs into deploy/dtbs"
     if mkdir -p "$deploy_dtbs_dir" && \
@@ -486,7 +489,7 @@ upstream_build_kernel()
         return "$rc"
     fi
 
-    if [[ "$TARGET_ARCH" != "x86_64" ]]; then
+    if [[ -n "${DTB_REL_PATH:-}" ]]; then
         kb_status_begin "   - Building DTBs"
         start="$(date +%s)"
         if "${make_base_cmd[@]}" dtbs >>"$LOG_FILE" 2>&1; then

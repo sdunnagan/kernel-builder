@@ -101,8 +101,9 @@ At the moment, these platform mappings resolve to:
 - `rpi4` → `aarch64`
 - `opi5plus` → `aarch64`
 - `orin-nano` → `aarch64`
+- `arm-server` → `aarch64`
 
-DTB paths are also inferred from the platform where applicable.
+DTB paths are also inferred from the platform where applicable. The `arm-server` preset represents an arm64 UEFI/ACPI server and therefore does not build or stage DTBs.
 
 ---
 
@@ -165,7 +166,7 @@ Options:
   -h                            Show help
   -k <config-file>              Apply Kconfig from file
   -l <localversion>             Set CONFIG_LOCALVERSION
-  -p <platform>                 Target platform (required: opi5plus|rpi4|orin-nano)
+  -p <platform>                 Target platform (required: opi5plus|rpi4|orin-nano|arm-server)
 ```
 
 ---
@@ -189,7 +190,7 @@ Options:
   -h                            Show help
   -k <config-file>              Apply Kconfig from file
   -l <localversion>             Set CONFIG_LOCALVERSION
-  -p <platform>                 Target platform (required: opi5plus|rpi4|orin-nano)
+  -p <platform>                 Target platform (required: opi5plus|rpi4|orin-nano|arm-server)
   -r                            Build RPM packages
   -s <stream>                   CentOS/RHEL kernel stream (y9|y10|z9|z10)
   -U <upstream-kernel-repo>     Upstream kernel repository (next|stable)
