@@ -31,7 +31,7 @@ Options:
   -d                            Configure kernel for debugging (requires -c)
   -h                            Show help
   -k <config-file>              Apply Kconfig from file
-  -l <localversion>             Set CONFIG_LOCALVERSION
+  -l <localversion>             Set CONFIG_LOCALVERSION (without a leading '-')
   -p <platform>                 Target platform (required: opi5plus|rpi4|orin-nano|arm-server)
 
 Environment:
@@ -51,7 +51,10 @@ upstream_parse_args()
             d) DEBUG_CONFIG=true ;;
             h) upstream_usage ;;
             k) KERNEL_CONFIG_FILE="$OPTARG" ;;
-            l) LOCALVERSION_TAG="$OPTARG" ;;
+            l)
+                kb_validate_localversion_tag "$OPTARG"
+                LOCALVERSION_TAG="$OPTARG"
+                ;;
             p) PLATFORM="$OPTARG" ;;
             :) kb_die "Option -$OPTARG requires an argument" 2 ;;
             *) upstream_usage ;;
@@ -539,8 +542,8 @@ upstream_build_kernel()
 
 upstream_main()
 {
-    upstream_parse_args "$@"
     kb_init_colors
+    upstream_parse_args "$@"
 
     kb_require_env_vars KERNEL_SRC_DIR KERNEL_BUILD_DIR
 

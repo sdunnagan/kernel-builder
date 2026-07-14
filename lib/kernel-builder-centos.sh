@@ -41,7 +41,7 @@ Options:
   -g                            Git clone
   -h                            Show help
   -k <config-file>              Apply Kconfig from file
-  -l <localversion>             Set CONFIG_LOCALVERSION
+  -l <localversion>             Set CONFIG_LOCALVERSION (without a leading '-')
   -p <platform>                 Target platform (required: opi5plus|rpi4|orin-nano|arm-server)
   -r                            Build RPM packages
   -s <stream>                   CentOS/RHEL kernel stream (y9|y10|z9|z10)
@@ -100,7 +100,10 @@ centos_parse_args()
             g) DO_CLONE=true ;;
             h) centos_usage ;;
             k) KERNEL_CONFIG_FILE="$OPTARG" ;;
-            l) LOCALVERSION_TAG="$OPTARG" ;;
+            l)
+                kb_validate_localversion_tag "$OPTARG"
+                LOCALVERSION_TAG="$OPTARG"
+                ;;
             p) PLATFORM="$OPTARG" ;;
             r) DO_BUILD_RPM=true ;;
             s) STREAM="$OPTARG"; centos_resolve_stream_spec "$STREAM" ;;
@@ -775,8 +778,8 @@ centos_build_kernel()
 
 centos_main()
 {
-    centos_parse_args "$@"
     kb_init_colors
+    centos_parse_args "$@"
 
     kb_require_env_vars KERNEL_SRC_DIR KERNEL_BUILD_DIR
 

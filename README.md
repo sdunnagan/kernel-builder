@@ -324,6 +324,14 @@ identifiable release string such as:
 7.0.0-florence+
 ```
 
+Pass the localversion without a leading `-`; the scripts add it automatically.
+When supplying it through a shell variable, make an unset or empty value fail
+before invoking the builder:
+
+```bash
+-l "${KERNEL_ID:?KERNEL_ID is not set}"
+```
+
 For rebuilds, use the same `-l` value you used during configuration.
 
 ---

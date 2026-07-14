@@ -85,6 +85,21 @@ kb_normalize_localversion()
     fi
 }
 
+kb_validate_localversion_tag()
+{
+    local tag="$1"
+
+    if [[ -z "$tag" ]]; then
+        kb_die "Option -l requires a non-empty localversion argument." 2
+    fi
+
+    if [[ "$tag" == -* ]]; then
+        kb_die \
+            "Invalid argument to -l: '${tag}'. Pass the localversion without a leading '-'; did a shell variable expand to an empty value?" \
+            2
+    fi
+}
+
 kb_require_env_vars()
 {
     local missing=()
