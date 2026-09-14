@@ -1,5 +1,12 @@
 #!/usr/bin/env bash
 
+KERNEL_BUILDER_VERSION="0.1.1"
+
+kb_print_version()
+{
+    printf 'kernel-builder %s\n' "$KERNEL_BUILDER_VERSION"
+}
+
 kb_init_colors()
 {
     if [[ -t 1 ]] && command -v tput >/dev/null 2>&1; then
@@ -152,6 +159,9 @@ kb_normalize_platform()
         orin-nano|orinnano)
             printf 'orin-nano\n'
             ;;
+        vf2|visionfive2|visionfive-2)
+            printf 'vf2\n'
+            ;;
         arm-server|armserver)
             printf 'arm-server\n'
             ;;
@@ -165,7 +175,7 @@ kb_require_platform()
 {
     [[ -n "${1:-}" ]] ||
         kb_die "-p <platform> is required.
-Supported platforms: opi5plus, rpi4, orin-nano, arm-server" 2
+Supported platforms: opi5plus, rpi4, orin-nano, vf2, arm-server" 2
 }
 
 kb_platform_to_target_arch()
@@ -173,6 +183,9 @@ kb_platform_to_target_arch()
     case "$1" in
         opi5plus|rpi4|orin-nano|arm-server)
             printf 'aarch64\n'
+            ;;
+        vf2)
+            printf 'riscv64\n'
             ;;
         *)
             return 1
@@ -192,6 +205,9 @@ kb_platform_to_dtb_rel_path()
         orin-nano)
             printf 'nvidia/tegra234-p3768-0000+p3767-0005.dtb\n'
             ;;
+        vf2)
+            printf 'starfive/jh7110-starfive-visionfive-2-v1.3b.dtb\n'
+            ;;
         arm-server)
             # UEFI/ACPI arm64 servers do not use a builder-supplied board DTB.
             printf '\n'
@@ -210,7 +226,7 @@ kb_resolve_platform()
     kb_require_platform "$requested_platform"
 
     if ! normalized_platform="$(kb_normalize_platform "$requested_platform")"; then
-        kb_die "Unknown platform preset: ${requested_platform}. Supported platforms: opi5plus, rpi4, orin-nano, arm-server" 2
+        kb_die "Unknown platform preset: ${requested_platform}. Supported platforms: opi5plus, rpi4, orin-nano, vf2, arm-server" 2
     fi
 
     PLATFORM="$normalized_platform"
@@ -246,6 +262,7 @@ kb_setup_cross_compile()
 
     host_arch=$(uname -m)
     if [[ "$host_arch" == "$target_arch" ]]; then
+        unset CROSS_COMPILE
         return 0
     fi
 
@@ -256,6 +273,40 @@ kb_setup_cross_compile()
         riscv64) export CROSS_COMPILE=riscv64-linux-gnu- ;;
         x86_64)  export CROSS_COMPILE=x86_64-linux-gnu- ;;
         *)       return 1 ;;
+    esac
+}
+
+kb_get_kbuild_image_rel_path()
+{
+    local kernel_src_dir="$1"
+    local kernel_build_dir="$2"
+    local kernel_arch="$3"
+    local -a cmd=(
+        make -s --no-print-directory -C "$kernel_src_dir"
+        O="$kernel_build_dir" ARCH="$kernel_arch"
+    )
+
+    if [[ -n "${CROSS_COMPILE:-}" ]]; then
+        cmd+=("CROSS_COMPILE=${CROSS_COMPILE}")
+    fi
+
+    "${cmd[@]}" image_name
+}
+
+kb_kernel_image_deploy_basename()
+{
+    local image_path="$1"
+    local image_name
+
+    image_name="$(basename "$image_path")"
+
+    case "$image_name" in
+        vmlinuz.efi)
+            printf 'vmlinuz\n'
+            ;;
+        *)
+            printf '%s\n' "$image_name"
+            ;;
     esac
 }
 

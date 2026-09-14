@@ -9,7 +9,9 @@ DTB_NAME=""
 DTB_REL_PATH=""
 KERNEL_ARCH=""
 KERNEL_CONFIG_FILE=""
+KERNEL_IMAGE_DEPLOY_NAME=""
 KERNEL_IMAGE_PATH=""
+KERNEL_IMAGE_REL_PATH=""
 KERNEL_IMAGE_TARGET=""
 KERNEL_RELEASE=""
 LOCALVERSION=""
@@ -32,7 +34,8 @@ Options:
   -h                            Show help
   -k <config-file>              Apply Kconfig from file
   -l <localversion>             Set CONFIG_LOCALVERSION (without a leading '-')
-  -p <platform>                 Target platform (required: opi5plus|rpi4|orin-nano|arm-server)
+  -p <platform>                 Target platform (required: opi5plus|rpi4|orin-nano|vf2|arm-server)
+  -V                            Show kernel-builder version
 
 Environment:
   KERNEL_SRC_DIR=${KERNEL_SRC_DIR:-<unset>}
@@ -43,7 +46,7 @@ USAGE
 
 upstream_parse_args()
 {
-    while getopts ":bcCdhk:l:p:" opt; do
+    while getopts ":bcCdhk:l:p:V" opt; do
         case "$opt" in
             b) DO_BUILD=true ;;
             c) DO_CONFIG=true ;;
@@ -56,6 +59,7 @@ upstream_parse_args()
                 LOCALVERSION_TAG="$OPTARG"
                 ;;
             p) PLATFORM="$OPTARG" ;;
+            V) kb_print_version; exit 0 ;;
             :) kb_die "Option -$OPTARG requires an argument" 2 ;;
             *) upstream_usage ;;
         esac
@@ -74,21 +78,38 @@ upstream_parse_args()
 upstream_resolve_build_targets()
 {
     KERNEL_ARCH="$(kb_arch_to_kernel_arch "$TARGET_ARCH")" || kb_die "Unsupported arch: ${TARGET_ARCH}" 2
+}
 
-    case "$TARGET_ARCH" in
-        aarch64)
-            KERNEL_IMAGE_TARGET="Image"
-            KERNEL_IMAGE_PATH="${KERNEL_BUILD_DIR}/arch/arm64/boot/Image"
-            ;;
-        riscv64)
-            KERNEL_IMAGE_TARGET="Image"
-            KERNEL_IMAGE_PATH="${KERNEL_BUILD_DIR}/arch/riscv/boot/Image"
-            ;;
-        x86_64)
-            KERNEL_IMAGE_TARGET="bzImage"
-            KERNEL_IMAGE_PATH="${KERNEL_BUILD_DIR}/arch/x86/boot/bzImage"
-            ;;
-    esac
+upstream_resolve_kernel_image()
+{
+    local image_rel_path
+
+    if image_rel_path="$(kb_get_kbuild_image_rel_path "$KERNEL_SRC_DIR" "$KERNEL_BUILD_DIR" "$KERNEL_ARCH")"; then
+        :
+    else
+        local rc=$?
+        return "$rc"
+    fi
+
+    [[ -n "$image_rel_path" ]] || {
+        echo "Error: Kbuild returned an empty kernel image path" >&2
+        return 1
+    }
+
+    [[ "$image_rel_path" != /* ]] || {
+        echo "Error: Kbuild returned an absolute kernel image path: ${image_rel_path}" >&2
+        return 1
+    }
+
+    KERNEL_IMAGE_REL_PATH="$image_rel_path"
+    KERNEL_IMAGE_PATH="${KERNEL_BUILD_DIR}/${KERNEL_IMAGE_REL_PATH}"
+    KERNEL_IMAGE_TARGET="$(basename "$KERNEL_IMAGE_REL_PATH")"
+    KERNEL_IMAGE_DEPLOY_NAME="$(kb_kernel_image_deploy_basename "$KERNEL_IMAGE_REL_PATH")"
+
+    {
+        echo "// KBUILD_IMAGE: ${KERNEL_IMAGE_REL_PATH}"
+        echo "// KERNEL_IMAGE_TARGET: ${KERNEL_IMAGE_TARGET}"
+    } >>"$LOG_FILE"
 }
 
 upstream_resolve_platform()
@@ -102,6 +123,9 @@ upstream_require_local_commands()
 
     if [[ "$DO_BUILD" == true || "$DO_CONFIG" == true ]]; then
         kb_require_commands gcc
+        if [[ -n "${CROSS_COMPILE:-}" ]]; then
+            kb_require_commands "${CROSS_COMPILE}gcc" "${CROSS_COMPILE}ld"
+        fi
     fi
 
     if [[ "$DO_BUILD" == true && -n "$DTB_REL_PATH" ]]; then
@@ -120,7 +144,7 @@ upstream_create_log_file()
     local ts gccv host
 
     ts="$(date +"%Y_%m_%d_%H%M")"
-    gccv="$(gcc --version | head -n 1 || true)"
+    gccv="$("${CROSS_COMPILE:-}gcc" --version | head -n 1 || true)"
     host="$(hostname -s 2>/dev/null || echo unknown)"
 
     mkdir -p "$LOG_DIR"
@@ -129,6 +153,7 @@ upstream_create_log_file()
     {
         echo "//---------------------------------------------------------------"
         echo "// Upstream Kernel Build"
+        echo "// kernel-builder: ${KERNEL_BUILDER_VERSION}"
         echo "// Date: $(date)"
         echo "// Host: ${host}"
         echo "// PLATFORM: ${PLATFORM}"
@@ -136,6 +161,7 @@ upstream_create_log_file()
         echo "// KERNEL_ARCH: ${KERNEL_ARCH}"
         echo "// KERNEL_SRC_DIR =   ${KERNEL_SRC_DIR}"
         echo "// KERNEL_BUILD_DIR = ${KERNEL_BUILD_DIR}"
+        echo "// CROSS_COMPILE: ${CROSS_COMPILE:-<none>}"
         echo "// GCC: ${gccv}"
         echo "// LOCALVERSION: ${LOCALVERSION:-<none>}"
         echo "// KCONFIG FILE: ${KERNEL_CONFIG_FILE:-<none>}"
@@ -359,13 +385,11 @@ upstream_install_dtbs_to_deploy()
 upstream_copy_build_artifacts()
 {
     local deploy_dir="${KERNEL_BUILD_DIR}/deploy"
-    local kernel_image_name
     local kernel_image_dst
     local modules_root="${KERNEL_BUILD_DIR}/modules_staging/lib/modules"
     local modules_dir="${modules_root}/${KERNEL_RELEASE}"
 
-    kernel_image_name="$(basename "$KERNEL_IMAGE_PATH")"
-    kernel_image_dst="${deploy_dir}/${kernel_image_name}-upstream-${KERNEL_RELEASE}"
+    kernel_image_dst="${deploy_dir}/${KERNEL_IMAGE_DEPLOY_NAME}-upstream-${KERNEL_RELEASE}"
 
     mkdir -p "$deploy_dir"
 
@@ -443,6 +467,15 @@ upstream_build_kernel()
         echo "   When:   $(date '+%F %T')"
         echo "   Log:    $LOG_FILE"
     } >>"$LOG_FILE"
+
+    kb_status_begin "   - Resolving Kbuild kernel image"
+    if upstream_resolve_kernel_image; then
+        kb_status_end_ok "   - Resolving Kbuild kernel image"
+    else
+        rc=$?
+        kb_status_end_fail "   - Resolving Kbuild kernel image" "$rc"
+        return "$rc"
+    fi
 
     kb_status_begin "   - Building kernel ${KERNEL_IMAGE_TARGET}"
     start="$(date +%s)"
@@ -544,11 +577,13 @@ upstream_main()
 {
     kb_init_colors
     upstream_parse_args "$@"
+    kb_print_version
 
     kb_require_env_vars KERNEL_SRC_DIR KERNEL_BUILD_DIR
 
     upstream_resolve_platform
     kb_validate_architecture "$TARGET_ARCH"
+    kb_setup_cross_compile "$TARGET_ARCH" >/dev/null 2>&1 || kb_die "Unable to configure compiler for target architecture: ${TARGET_ARCH}" 2
     upstream_resolve_build_targets
     kb_set_dtb_paths
     upstream_require_local_commands

@@ -27,6 +27,7 @@ different targets.
 - stage build outputs into predictable locations:
   - `deploy/`
   - `modules_staging/`
+- honor Kbuild's configured boot image instead of assuming `Image` or `bzImage`
 
 For the CentOS Stream / RHEL workflow, it can also:
 
@@ -66,7 +67,7 @@ Typical use cases:
 
 - mainline kernel testing
 - local feature work
-- ARM board bring-up
+- ARM and RISC-V board bring-up
 - quick iteration on custom kernels
 
 ### CentOS Stream / RHEL kernel builds
@@ -93,6 +94,8 @@ The current platform list is intentionally small and explicit:
 - `rpi4`
 - `opi5plus`
 - `orin-nano`
+- `vf2`
+- `arm-server`
 
 Architecture is inferred from the selected platform.
 
@@ -101,9 +104,16 @@ At the moment, these platform mappings resolve to:
 - `rpi4` → `aarch64`
 - `opi5plus` → `aarch64`
 - `orin-nano` → `aarch64`
+- `vf2` → `riscv64`
 - `arm-server` → `aarch64`
 
-DTB paths are also inferred from the platform where applicable. The `arm-server` preset represents an arm64 UEFI/ACPI server and therefore does not build or stage DTBs.
+DTB paths are also inferred from the platform where applicable. The `vf2` preset uses the VisionFive 2 v1.3B DTB. The `arm-server` preset represents an arm64 UEFI/ACPI server and therefore does not build or stage DTBs.
+
+The kernel boot image is not hard-coded by architecture. After the kernel
+configuration is finalized, kernel-builder asks Kbuild's `image_name` target
+for the configured `KBUILD_IMAGE` and builds that target. For example, a
+RISC-V configuration with `CONFIG_EFI_ZBOOT=y` resolves to
+`arch/riscv/boot/vmlinuz.efi` rather than the uncompressed `Image`.
 
 ---
 
@@ -122,6 +132,22 @@ kernel-builder/
 The two front-end scripts are intentionally thin.  
 Most shared behavior lives in the common library, while upstream-specific and
 CentOS-specific behavior lives in separate libraries.
+
+---
+
+## Version
+
+The current kernel-builder version is `0.1.1`. Both front ends print the
+version when they start. Version 0.1.1 fixes kernel-image selection by using
+Kbuild's configured `KBUILD_IMAGE`; this is required for RISC-V EFI zboot
+kernels such as the VisionFive 2 Fedora configuration.
+
+To print only the version, use:
+
+```bash
+./upstream-kernel-builder -V
+./centos-kernel-builder -V
+```
 
 ---
 
@@ -166,7 +192,8 @@ Options:
   -h                            Show help
   -k <config-file>              Apply Kconfig from file
   -l <localversion>             Set CONFIG_LOCALVERSION
-  -p <platform>                 Target platform (required: opi5plus|rpi4|orin-nano|arm-server)
+  -p <platform>                 Target platform (required: opi5plus|rpi4|orin-nano|vf2|arm-server)
+  -V                            Show kernel-builder version
 ```
 
 ---
@@ -190,10 +217,11 @@ Options:
   -h                            Show help
   -k <config-file>              Apply Kconfig from file
   -l <localversion>             Set CONFIG_LOCALVERSION
-  -p <platform>                 Target platform (required: opi5plus|rpi4|orin-nano|arm-server)
+  -p <platform>                 Target platform (required: opi5plus|rpi4|orin-nano|vf2|arm-server)
   -r                            Build RPM packages
   -s <stream>                   CentOS/RHEL kernel stream (y9|y10|z9|z10)
   -U <upstream-kernel-repo>     Upstream kernel repository (next|stable)
+  -V                            Show kernel-builder version
   -x                            Prepare for backporting
 ```
 
@@ -366,18 +394,29 @@ $KERNEL_BUILD_DIR/deploy/
 $KERNEL_BUILD_DIR/modules_staging/
 ```
 
-### Upstream output example
+### Upstream output examples
+
+The deployed kernel filename follows the image selected by Kbuild. Typical
+examples are:
 
 ```text
-$KERNEL_BUILD_DIR/deploy/Image-upstream-<kernel-release>
+$KERNEL_BUILD_DIR/deploy/Image-upstream-<kernel-release>      # arm64 Image
+$KERNEL_BUILD_DIR/deploy/vmlinuz-upstream-<kernel-release>    # EFI zboot
 $KERNEL_BUILD_DIR/deploy/dtbs/
 $KERNEL_BUILD_DIR/modules_staging/lib/modules/<kernel-release>/
 ```
 
-### CentOS Stream / RHEL output example
+For the VisionFive 2 Fedora configuration with `CONFIG_EFI_ZBOOT=y`, the
+expected kernel artifact is `vmlinuz-upstream-<kernel-release>`.
+
+### CentOS Stream / RHEL output examples
+
+Likewise, the deployed downstream kernel filename follows Kbuild's selected
+image:
 
 ```text
 $KERNEL_BUILD_DIR/deploy/Image-cs10-<kernel-release>
+$KERNEL_BUILD_DIR/deploy/vmlinuz-cs10-<kernel-release>        # EFI zboot
 $KERNEL_BUILD_DIR/deploy/dtbs/
 $KERNEL_BUILD_DIR/modules_staging/lib/modules/<kernel-release>/
 $KERNEL_BUILD_DIR/deploy/rpms/     # when -r is used
